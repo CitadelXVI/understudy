@@ -1,5 +1,7 @@
 # Understudy
 
+[![Support Understudy on Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20Understudy-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/citadelxvi)
+
 A local animation workbench for game characters. Describe a motion in words, get a clip from
 NVIDIA's Kimodo text-to-motion model running on your own GPU, check it for the faults that make
 generated motion unusable, fix them in place, and send the result to your engine.
@@ -98,6 +100,11 @@ scripts/          build, weights, start/stop, tool setup
 
 Development: `build\understudy.exe -static static -generator kimodo.cpp/build/release/kmd-generate -output demo-output`
 serves the page from disk so edits show on reload. `go test .` runs the server tests.
+
+## Support
+
+Understudy is free and stays free. If it saves you time, you can buy it a coffee at
+[ko-fi.com/citadelxvi](https://ko-fi.com/citadelxvi). Bug reports, clips that came out wrong and pull requests help just as much.
 
 ## Licenses
 
