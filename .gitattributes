@@ -1,0 +1,6 @@
+* text=auto
+*.bat text eol=crlf
+*.glb binary
+*.f32 binary
+*.task binary
+*.wasm binary

@@ -1,0 +1,27 @@
+# Build output
+/build/
+*.exe
+
+# Model weights and downloads (fetched by scripts/get-weights.bat, never committed)
+/models/
+/sources/
+/generated/
+/.kimodo-manifests/
+*.gguf
+*.safetensors
+*.pth
+
+# Your clips, projects and backups
+/demo-output/
+
+# Optional tool checkouts and Python environments
+/motionbricks/
+.venv/
+.venv-*/
+__pycache__/
+*.pyc
+
+# Local scratch
+*.log
+*.blend1
+/soma30.json

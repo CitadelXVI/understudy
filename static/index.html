@@ -1,0 +1,652 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Understudy</title>
+<link rel="icon" href="/static/mark.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<main id="layout">
+
+  <!-- Left dock: compose -->
+  <aside class="dock" id="dockLeft" data-dock="left">
+    <header class="dock-head">
+      <div class="brand">
+        <img class="mark" src="/static/mark.svg" alt="">
+        <div>
+          <div class="eyebrow" id="eyebrow">Text to motion</div>
+          <h1>Understudy</h1>
+        </div>
+      </div>
+      <button class="icon" id="collapseLeft" title="Collapse panel">‹</button>
+    </header>
+
+    <nav class="flow-tabs" role="tablist" aria-label="What you're doing">
+      <button class="flow-tab on" type="button" role="tab" data-flow="make" title="Make a new clip: from words, or between poses">Make</button>
+      <button class="flow-tab" type="button" role="tab" data-flow="share" title="Save the clip as a file, send it to Unreal, or share it">Export</button>
+    </nav>
+
+    <div class="dock-body">
+      <div class="flow-page" data-flow="make">
+        <div class="make-switch" role="tablist">
+          <button class="make-opt on" type="button" data-make="describe" title="Write what the person does">Describe it</button>
+          <button class="make-opt" type="button" data-make="poses" title="Save poses, then animate between them (no words needed)">From poses</button>
+        </div>
+        <div class="make-page" data-make="describe">
+          <section class="card compose">
+            <div class="row-between"><h2 title="Write what the person does, in plain words. Press Generate below.">Describe a motion</h2><span class="hint" id="segmentCount" title="The parts play one after the other, in one clip"></span></div>
+            <div id="segments" class="segments">
+              <div class="segment" data-primary>
+                <textarea id="prompt" class="segment-prompt" rows="4" title="What the person does. For a scene with two people, name them: Actor 1 kicks Actor 2. Actor 2 blocks." placeholder="A person … — or a scene: Actor 1 throws a spinning kick at Actor 2. Actor 2 catches the kick and counters with a punch.">A person runs forward and then leaps over an obstacle in front of them.</textarea>
+                <input class="segment-frames" type="number" min="60" max="360" step="1" value="150" title="How long this part is, in frames: 60 to 360 (30 frames = 1 second)">
+                <span class="hint segment-secs">5.0 s</span>
+              </div>
+            </div>
+            <div class="row-between wrap compose-actions">
+              <div class="row-gap">
+                <button class="secondary" id="addSegment" type="button" title="Add a next part: a second motion that follows the first in the same clip">+ Then…</button>
+                <button class="secondary" id="clearCompose" type="button" title="Start fresh: an empty prompt, no keyframes, a new seed">Clear</button>
+              </div>
+              <label class="takes-field" title="How many versions to generate at once, each from its own seed. The cleanest one is picked for you; the others stay one click away under the stage.">Takes <input id="takes" type="number" min="1" max="8" step="1" value="4"></label>
+            </div>
+            <div class="run-strip meta-strip">
+              <label class="actor" title="Who this motion is for in a scene. 'Actor N' in the text becomes 'a person' (the one generated) or 'another person'; the finished clip takes that actor's place in the scene."><span>Actor</span><select id="actorTarget" class="inline"><option value="">No actor</option></select></label>
+              <label class="saved" title="Prompts saved in this project, with the settings they ran with"><span>Saved prompt</span><span class="row-gap"><select id="savedPrompts" class="inline"><option value="">Load…</option></select><button class="icon" id="savePrompt" type="button" title="Save this prompt and its settings to the project">+</button></span></label>
+            </div>
+            
+            <div id="sceneRow" class="row-between wrap" hidden>
+              <span class="scene-hint" id="sceneHint"></span>
+              <label class="check" title="After both clips exist, pin the contact (catch, block, grab…) and regenerate around it; then push hands out of the other actor"><input type="checkbox" id="scenePolish" checked> Pin contacts</label>
+              <label class="check" title="Takes per actor; the cleanest take plays, the others are archived">Takes each <select id="sceneTakes" class="inline"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
+            </div>
+            <button id="generate" type="button" title="Make the clip from the words above (G). Takes a minute or two; it appears in the Library on the right.">Generate motion</button>
+            <div id="status" class="readout" title="What Understudy is doing right now">Ready</div>
+            <span class="hint saving-to" id="savingTo" title="The project and folder new clips go into (pick it in the Library on the right)"></span>
+            <details class="more">
+              <summary title="Generate many clips in one go">Generate many at once</summary>
+              <div class="row-gap wrap">
+                <button class="secondary" id="promptSheet" type="button" title="Paste a list of prompts, one per line, and generate them all">Prompt list…</button>
+                <button class="secondary" id="styleSet" type="button" title="One action, generated for each gender and body type (animation sets)">Style set…</button>
+                <button class="secondary" id="locoSet" type="button" title="Walks, jogs and runs in every direction, each following its route (motion matching coverage)">Walk / run set…</button>
+              </div>
+            </details>
+          </section>
+          <details class="card" id="guideCard">
+            <summary title="Optional: poses the next generated clip must pass through">Guide the next clip <span class="hint">optional</span></summary>
+            <p class="how">Your words make the clip; this makes it pass through exact poses too. Pause the stage on a frame and <b>Pin this pose</b>, or add a saved pose below. Generate works fine without any.</p>
+            <div class="row-gap wrap guide-pick"><label class="inline" title="A pose you saved (From poses)">Saved pose <select id="guidePose" class="inline"><option value="">none saved yet</option></select></label><label class="inline" title="Frame of the next clip where it reaches this pose (0 = it starts in this pose)">at frame <input id="guideFrame" type="number" min="0" step="1" value="0" class="tiny"></label><button class="secondary" id="guideAdd" type="button" title="The next clip passes through that pose at that frame">Add</button></div>
+            <div class="row-gap"><button class="secondary" id="pinPose" type="button" title="The next clip passes through the pose on the stage, at this frame">Pin this pose</button></div>
+            <button class="secondary" id="reuseConstraints" type="button" hidden></button>
+            <div id="keyframeList" class="keyframes"></div>
+            <button id="regenWithKeys" type="button" hidden title="Generate the clip again (same words) through these keys">Generate again with these keys</button>
+            <div class="hint" id="keyframeHint"></div>
+            <div class="field-row two">
+              <label for="constraintCFG" title="How closely the next clip follows these keys. Raise it if a pose is missed.">Follow the keys</label>
+              <span class="row-gap"><input id="constraintCFG" type="number" min="0" max="20" step="0.1" value="2" class="short" title="How closely the pinned poses are hit (0–20, normally 2). Raise it if a pose is missed."><span class="hint">2 is normal; higher sticks closer</span></span>
+            </div>
+          </details>
+          <details class="card" open id="fromClipCard">
+            <summary title="A new clip that starts from the one on the stage">Start from the clip on stage</summary>
+            <div class="row-gap wrap from-clip">
+              <button class="secondary" id="continueFrom" type="button" title="The next clip starts where this one ends">Continue from its end</button>
+              <button class="secondary" id="moreLikeThis" type="button" title="New takes of the same thing: same words and settings, first and last poses kept">More like it</button>
+              <button class="secondary" id="makeLoop" type="button" title="The next clip ends in its starting pose, so it loops">Make it loop</button>
+              <button class="secondary ship" id="shipClip" hidden type="button" title="Send the clip on the stage directly into your linked Unreal .uproject (the same as Export → Send to Unreal)">Send to Unreal</button>
+            </div>
+          </details>
+          <details class="card" id="advancedCard">
+            <summary title="Settings you rarely need to change">Advanced</summary>
+            <div class="run-strip">
+              <label title="Quality. 50 is quick and usually enough; 100 for a final take (slower)."><span>Steps</span><input id="steps" type="number" min="1" max="1000" step="1" value="50" title="Quality. 50 is quick and usually enough; 100 for a final take (slower)."></label>
+              <label class="seed" title="The random start. The same words and seed give the same motion again."><span>Seed</span><span class="row-gap"><input id="seed" type="number" min="0" step="1" title="The random start. The same words and seed give the same motion again."><button class="icon" id="randomSeed" type="button" title="Pick a new random seed">⟳</button><button class="icon" id="lockSeed" type="button" title="Keep this seed for the next generations (off: a new seed each time, so retries differ)" aria-pressed="false">🔓</button></span></label>
+              <label class="model" title="The motion model that makes the clip"><span>Model</span><select id="motionModel" title="The motion model that makes the clip"></select></label>
+            </div>
+            <div class="field-row two">
+              <label for="textQuantization" title="The copy of the text model that reads your words. Bigger is truer to the original and slower.">Text model</label>
+              <select id="textQuantization" title="The copy of the text model that reads your words. Bigger is truer to the original and slower."></select>
+            </div>
+            <div class="hint" id="quantizationHint"></div>
+            <div class="field-row">
+              <label for="textCFG" title="How closely the motion follows your words. Lower is looser and more natural; higher is more literal.">Follow the words</label>
+              <input id="textCFG" type="number" min="0" max="20" step="0.1" value="2" title="How closely the motion follows your words (0–20). Lower is looser and more natural; higher is more literal. 2 is the default.">
+              <button class="secondary" id="resetCFG" type="button" title="Back to 2">Default</button>
+            </div>
+            <label class="check" title="After generating: plant the feet where they touch the ground and land exactly on the pinned poses"><input id="postProcess" type="checkbox" checked> Clean up feet and pinned poses</label>
+            <label class="check" title="Limit each wrist to a human range (twist ±80°, bend 70°) and smooth it, on every new clip"><input id="cleanWristsGen" type="checkbox" checked> Clean wrists on every new clip</label>
+            <label class="check" title="On every frame where a hand sinks into the head, the wrist is moved just outside the skull (eased over ±4 frames) before the clip is checked"><input id="cleanHandsGen" type="checkbox" checked> Keep hands out of the face on every new clip</label>
+            <label class="check" title="A hand that dips within 20 cm of the floor while the body is low or upside down (a cartwheel, a handstand, a push-up) is planted on it, eased over ±3 frames"><input id="groundHandsGen" type="checkbox" checked> Plant hands that reach for the floor on every new clip</label>
+            <label class="check" title="Frames where a foot stands still above the floor are lowered until it touches (eased over the landing), so a clip that rolls and stands up no longer ends hovering"><input id="groundFeetGen" type="checkbox" checked> Keep standing feet on the floor on every new clip</label>
+            <label class="check" title="Physics + anti-clipping on every new clip: a body with real collision follows the motion (no arm or leg through the body, feet on the floor, shakes damped), then any shake left is smoothed and any overlap left is pushed out, eased. Adds ~5–10 s per take"><input id="cleanUpGen" type="checkbox" checked> Clean up every new clip (physics + anti-clipping)</label>
+            <label class="check" title="Kimodo plays a move at its own pace: too few frames cut it off mid-motion, too many leave seconds of idle. This asks the model to come to rest after the move, then trims the idle beyond a short hold at both ends, so every clip is a complete move. Turn it off for walk/run cycles you will loop"><input id="finishSettledGen" type="checkbox" checked> Finish settled: end at rest, trim idle (one-shot moves)</label>
+            <label class="check" title="Some prompts name a move that can be measured (a flip, a cartwheel, a jump, a high kick, sitting, kneeling or lying on the floor, push-ups). When a take misses it — a front flip that rolls on its head, a sit-down that starts seated — another seed is tried, up to 3 more times, and the best take is kept"><input id="retryActionGen" type="checkbox" checked> Retry takes that miss the move (up to 3 more)</label>
+            <label class="check" title="Pin a neutral standing pose on the first frames. Off by default: a pinned start kept the first seconds generic (the words' character arrived late). A kneel or crouch that begins already down is tried again automatically."><input type="checkbox" id="startStandingGen"> Start from a neutral standing pose</label>
+            <label class="check" title="The older, lighter smoother: joints that shake back and forth for a frame or two are refitted over a few frames around the shake. Not needed with Clean up on"><input id="smoothJitterGen" type="checkbox"> Smooth out jitter on every new clip (lighter, older)</label>
+            <div class="hint" id="modelHint" title="The motion model's licence"></div>
+          </details>
+        </div>
+        <div class="make-page" data-make="poses" hidden>
+          <details class="card" open id="posesCard">
+            <summary title="Your saved poses">Poses <span class="hint">save a pose, then use it</span></summary>
+            <p class="how">Get the figure on the stage into a pose you like (pause a clip on a frame, or move it with <b>Handles</b>), then save it. Click a saved pose to use it.</p>
+            <div class="row-gap"><button class="secondary" id="savePose" type="button" title="Save the pose on the stage to your poses, to reuse later">Save this pose</button></div>
+            <div class="pose-grid" id="poseGrid" hidden></div>
+            <div class="pose-actions" id="poseActions" hidden>
+              <div class="pose-actions-name" id="poseActionsName"></div>
+              <div class="hint pose-actions-how"><b>Add to pose animation</b> builds a clip from poses alone (below). <b>Use in next clip</b> makes the next clip you describe pass through this pose at a frame.</div>
+              <div class="row-gap wrap">
+                <button id="addToSequence" type="button" title="Add this pose to the end of your pose animation (below)">Add to pose animation</button>
+                <button class="secondary" id="insertPose" type="button" title="The next clip you generate will pass through this pose, at the frame given here (0 = it starts in this pose)">Use in next clip</button>
+                <label class="inline" title="Frame of the next clip where it reaches this pose (0 = it starts in this pose)">at frame <input id="poseFrame" type="number" min="0" step="1" value="0" class="tiny"></label>
+                <button class="secondary" id="poseMenu" type="button" title="Rename or delete this pose">Rename…</button>
+              </div>
+            </div>
+            <div class="hint" id="poseNote"></div>
+            <select id="poseSelect" hidden title="Picked pose"><option value="">Pick…</option></select>
+          </details>
+          <details class="card" open id="poseAnimCard">
+            <summary title="Make a clip that moves through your poses, in order">Animate between poses <span class="hint">no words needed</span></summary>
+            <p class="how" id="sequenceHow"><b>1.</b> Click a pose above. <b>2.</b> Press <b>Add to pose animation</b> (or the <b>+</b> on the pose). Add two or more, in order. <b>3.</b> Press <b>Make animation</b>. To sit on something, first put a box on the stage with <b>Box</b> (left of the stage) and set the seated pose to <b>sit</b> in the list.</p>
+            <div id="sequenceRow" hidden>
+              <ol class="seq-list" id="sequenceList"></ol>
+              <div class="row-gap">
+                <button id="generateSequence" type="button" title="Make a clip that moves through these poses, in this order">Make animation</button>
+                <button class="secondary" id="clearSequence" type="button" title="Start the list again">Clear</button>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div class="flow-page" data-flow="share" hidden>
+        <section class="card share-card">
+          <h2>Export</h2>
+          <div class="export-clip" id="exportClipInfo">
+            <div class="export-clip-name" id="exportClipName">No clip on the stage</div>
+            <div class="hint export-clip-checks" id="exportClipChecks" hidden></div>
+          </div>
+          <p class="how">Save the clip on the stage as a file, or send it straight into a linked Unreal project. To import by hand (Unreal, Blender, three.js), download the <b>GLB</b> or <b>BVH</b> below.</p>
+          <div class="export-list" id="exportMenu">
+          <button type="button" id="sendUnreal"><b>Send to Unreal</b> · imports and retargets directly into your Unreal project (.uproject)</button>
+          <a id="download" download>Download GLB · skeleton only, for three.js or your own tools</a>
+          <a id="downloadSkinned" download>Download GLB · with the body, for importing into Unreal or Blender</a>
+          <a id="downloadFBX" download title="Made with Blender on this computer (a few seconds)">Download FBX · with the body, for importing into Unreal, Unity or Maya</a>
+          <a id="downloadBVH" download>Download BVH · the classic mocap format (centimetres, 30 fps)</a>
+          <button type="button" id="frameSheet">Frame sheet PNG · every frame from the side, for drawing over</button>
+          <button type="button" id="exportVideo">Video · a WebM of the stage, every frame</button>
+          </div>
+        </section>
+        <section class="card">
+          <h2>Share with others</h2>
+          <p class="how">A <b>.understudy</b> file anyone can open in <b>Browse shared animations</b> and add to their own library.</p>
+          <div class="row-gap wrap">
+            <button class="secondary" id="sharePackButton" type="button" title="Save the clip on the stage as a .understudy file">Save a .understudy file…</button>
+            <button class="secondary" id="browseSharedButton" type="button" title="Open shared .understudy files or a shared folder">Browse shared animations</button>
+          </div>
+        </section>
+      </div>
+
+
+
+
+
+    </div>
+    <div class="dock-scroll-cue" aria-hidden="true"></div>
+  </aside>
+  <div class="resizer" id="resizeLeft" data-for="left" title="Drag to resize"></div>
+
+  <!-- Stage -->
+  <section class="stage">
+    <div class="stage-canvases">
+      <canvas id="view" aria-label="Animated skeleton"></canvas>
+      <canvas id="view3d" aria-hidden="true"></canvas>
+      <canvas id="viewui" aria-hidden="true"></canvas>
+      <div id="toast" class="toast" hidden></div>
+      <div class="stage-view" aria-label="View">
+        <span class="view-presets"><button class="icon" data-view="front" title="Look from the front (1)">Front</button><button class="icon" data-view="side" title="Look from the side (3)">Side</button><button class="icon" data-view="top" title="Look from above (7)">Top</button><button class="icon" data-view="three" title="Three-quarter view (5)">¾</button></span>
+        <button class="secondary" id="resetView" type="button" title="Reset camera (double-click the stage)">Reset view</button>
+        <button class="secondary" id="clearStage" type="button" hidden title="Take the clip off the stage (nothing is deleted)">Clear stage</button>
+        <button class="secondary" id="body" type="button" title="Show the Understudy body (B)">Body</button>
+        <button class="secondary" id="sides" type="button" title="Colour the figure's left limbs blue and right limbs orange, so left and right are clear at a glance">Sides</button>
+        <span class="trail-anchor">
+          <button class="secondary" id="trail" type="button" title="What the stage shows: motion trails (T), onion skin, camera follow, body size, a prop">View</button>
+          <div id="trailPanel" class="popover view-panel" hidden>
+            <div class="pm-label">Stage</div>
+            <div class="popover-grid">
+              <label class="check"><input type="checkbox" data-trail="follow"> Camera follows</label>
+              <label class="check" title="Faint copies of the pose at neighbouring frames (every 4th, up to ±12) or at every key, guide pose and marker">Onion skin <select id="onion" class="inline"><option value="off">off</option><option value="near">±12 frames</option><option value="keys">keyframes</option></select></label>
+              <label class="check" title="Body turns translucent with the stick figure showing through, to check they stay in sync (X)"><input type="checkbox" id="xray"> Skeleton through body <span id="xrayHint" class="hint"></span></label>
+              <label class="check" title="Draw the body parts the self-clip check tests; red where two overlap on this frame"><input type="checkbox" id="clipCapsules"> Clip capsules <span id="clipHint" class="hint"></span></label>
+            </div>
+            <div class="pm-label">Body</div>
+            <div class="popover-grid">
+              <label class="check" title="How the doll's fingers are posed (Kimodo has no finger joints). Auto: a fist when the hand travels fast, relaxed otherwise.">Hands <select id="hands" class="inline"><option value="auto">auto</option><option value="relaxed">relaxed</option><option value="fist">fist</option><option value="open">open</option><option value="point">point</option><option value="flat">flat</option></select></label>
+              <label class="check">Body scale <select id="bodyScale" class="inline"><option value="0.85">0.85 (youth)</option><option value="1" selected>1.0</option><option value="1.1">1.1 (tall)</option></select></label>
+              <label class="check">Prop <select id="prop" class="inline"><option value="">none</option><option value="staff:1.6">staff 1.6 m</option><option value="bat:0.8">bat 0.8 m</option><option value="sword:0.9">sword 0.9 m</option></select> <select id="propHand" class="inline"><option value="rhand">right</option><option value="lhand">left</option></select></label>
+            </div>
+            <div class="pm-label">Trails</div>
+            <label class="check"><input type="checkbox" data-trail="on"> <b>Show trails</b></label>
+            <div class="popover-grid trail-parts">
+              <label class="check"><input type="checkbox" data-trail="hips"> <i class="swatch" style="background:#fff"></i> Hips</label>
+              <label class="check"><input type="checkbox" data-trail="ground"> <i class="swatch" style="background:#ff8a80"></i> Ground route</label>
+              <label class="check"><input type="checkbox" data-trail="arrows"> <i class="swatch" style="background:#ffd700"></i> Facing arrows</label>
+              <label class="check"><input type="checkbox" data-trail="metres"> <i class="swatch dot"></i> Metre marks</label>
+              <label class="check"><input type="checkbox" data-trail="head"> <i class="swatch" style="background:#ffd27f"></i> Head</label>
+              <label class="check"><input type="checkbox" data-trail="dots"> <i class="swatch dot"></i> Frame dots</label>
+              <label class="check"><input type="checkbox" data-trail="lhand"> <i class="swatch" style="background:#7fd0ff"></i> Left hand</label>
+              <label class="check"><input type="checkbox" data-trail="rhand"> <i class="swatch" style="background:#7fd0ff"></i> Right hand</label>
+              <label class="check"><input type="checkbox" data-trail="lfoot"> <i class="swatch" style="background:#8fe3a2"></i> Left foot</label>
+              <label class="check"><input type="checkbox" data-trail="rfoot"> <i class="swatch" style="background:#8fe3a2"></i> Right foot</label>
+            </div>
+          </div>
+        </span>
+      </div>
+      <aside class="stage-fixes" id="stageFixes" hidden aria-label="Checks and fixes">
+        <header class="sf-head">
+          <span class="sf-title">Checks</span><span class="sf-count" id="fixCount"></span>
+          <button class="icon sf-toggle" id="fixToggle" type="button" title="Fold the checks away (they stay one click from here)">–</button>
+        </header>
+        <div class="sf-body">
+          <div id="assistant" class="assistant" hidden></div>
+          <p class="sf-how">Every fix is undoable (Ctrl+Z).</p>
+        </div>
+      </aside>
+      <div class="stage-dock" id="stageDock">
+        <div id="keepBar" class="handle-bar keep pose-bar" hidden>
+          <div class="pb-row pb-hint"><span class="hint" id="keepHint"></span></div>
+          <div class="pb-row"><span class="pb-title">Range</span><button class="secondary" id="keepIn" type="button" title="Range starts at the current frame (shortcut: [)">Set start</button><button class="secondary" id="keepOut" type="button" title="Range ends at the current frame (shortcut: ])">Set end</button><button class="secondary" id="keepClear" type="button">Clear range</button></div>
+          <div class="pb-row"><span class="pb-title">Change it</span><button id="keepRegen" type="button" title="Keep everything outside the range and regenerate the range with a new prompt">Redo with new words…</button><span class="row-gap" title="Smooth out a pop or shake by blending the range toward a smooth path between its two end frames (baked, undoable)">
+            <select id="tweenAmount" class="inline"><option value="0.3">smooth 30%</option><option value="0.6">smooth 60%</option><option value="1">smooth 100%</option></select>
+            <button class="secondary" id="tweenRange" type="button" title="Smooth out a pop or shake between the range's start and end frames (baked, undoable)">Tween</button>
+          </span><button class="secondary" id="mirrorRange" type="button" title="Mirror left ↔ right over the range only, baked, undoable">Mirror</button><button class="secondary" id="cutRange" type="button" title="A new clip of just these frames (the original stays): the move without the run-up and the hold">Cut to range</button></div>
+          <div class="pb-row"><span class="pb-title">Next clip</span><select id="keepPart" title="What to keep from the range. Hands and feet also hold the hips where they were."><option value="body">Full body</option><option value="feet">Feet</option><option value="hands">Hands</option><option value="limbs">Hands + feet</option><option value="hips">Hips path</option></select><select id="keepDensity" title="How closely the next clip matches this stretch."><option value="6">match closely (every 6th)</option><option value="3">match tightly (every 3rd)</option><option value="1">exact copy (every frame)</option><option value="12">loose guide (every 12th)</option></select><button class="secondary" id="keepAdd" type="button" title="Add this range to the next generation (stacks with keeps from other clips)">Keep in next clip</button><button class="secondary" id="plantFeet" type="button" title="Find every frame where a foot is planted on this clip and keep it planted in the next clip">Keep planted feet in next clip</button></div>
+        </div>
+        <div id="pathBar" class="handle-bar" hidden>
+          <span class="hint" id="pathHint"></span>
+          <button id="usePath" type="button" title="Make the next clip follow this path: one stroke per prompt segment, poses pinned along it">Use path</button>
+          <button class="secondary" id="clearPath" type="button">Clear</button>
+        </div>
+        <div id="pointBar" class="handle-bar" hidden>
+          <span class="hint" id="pointHint"></span>
+          <select id="pointLimb" class="inline" title="What touches the point"><option>Right hand</option><option>Left hand</option><option>Right foot</option><option>Left foot</option></select>
+          <label class="inline" title="The frame the hand or foot is on the point">frame <input id="pointFrame" type="number" min="1" step="1" value="45" style="width:4.5em"></label>
+          <label class="inline" title="How high the point is (m); Shift + drag it on the stage does the same">height <input id="pointHeight" type="number" min="0" max="2.5" step="0.05" value="1.00" style="width:4.5em"> m</label>
+          <button id="usePoint" type="button" title="Build the reach to this point and add it to the next clip">Use point</button>
+          <button class="secondary" id="deletePoint" type="button">Delete</button>
+          <button class="secondary" id="clearPoints" type="button">Clear</button>
+        </div>
+        <div id="propBar" class="handle-bar prop" hidden>
+          <span class="hint" id="propHint"></span>
+          <input id="propName" type="text" placeholder="name" title="The box's name on the stage">
+          <label title="Width, metres (across the facing)">W <input id="propW" type="number" step="0.05" min="0.05" max="10"></label>
+          <label title="Height, metres (the top is this far above the floor)">H <input id="propH" type="number" step="0.05" min="0.05" max="5"></label>
+          <label title="Depth, metres (along the facing)">D <input id="propD" type="number" step="0.05" min="0.05" max="10"></label>
+          <label title="Turn about the vertical, degrees">Turn <input id="propYaw" type="number" step="5"></label>
+          <button class="secondary" id="propUnderHips" type="button" title="Slide the box under the hips at this frame (a seat under a seated pose)">Under hips</button>
+          <button class="secondary" id="propRemove" type="button" title="Take the box off the stage">Remove</button>
+          <button class="secondary" id="propDone" type="button">Done</button>
+        </div>
+        <div id="handleBar" class="handle-bar pose-bar" hidden>
+          <div class="pb-row pb-hint"><span class="hint" id="handleHint"></span></div>
+          <div class="pb-row pb-head">
+            <span class="pb-title">Pose</span>
+            <span class="seg" role="group" aria-label="Mode">
+              <button class="secondary on" id="moveMode" type="button" title="Drag a hand, a foot or the hips; the arm or leg follows (inverse kinematics)">Move hands &amp; feet</button>
+              <button class="secondary" id="turnMode" type="button" title="Turn joints instead of moving them: a ring on every joint; drag a ring to aim that bone, Shift + drag to twist it, Ctrl + click to pick several (R)">Turn joints</button><button class="secondary" id="dollMode" type="button" title="Doll: no dots or rings. Drag the body part itself (a forearm turns the elbow, a thigh the hip, a hand or foot moves its limb, the pelvis the body). Click a part, then type its angles or nudge it with the arrow keys for exact control">Doll</button>
+            </span>
+            <button id="keyPose" type="button" title="Make this pose part of the clip (S): a key on the timeline for the parts you changed; the motion blends into it and out again. Ctrl+Z undoes it">◆ Key this pose</button>
+            <span id="poseKeyState" class="pose-key-state" hidden></span>
+            <button class="secondary" id="hideHandles" type="button" title="Hide the handles to see your pose clearly; your changes stay (V)">Hide handles</button>
+            <button class="secondary" id="undoApply" type="button" title="Undo the last applied edit (Ctrl+Z)" hidden>Undo edit</button><button class="secondary" id="redoApply" type="button" title="Redo the last undone edit (Ctrl+Y)" hidden>Redo edit</button>
+            <span class="trail-anchor">
+              <button class="secondary" id="poseMoreButton" type="button" title="More: hold a pose over a range, pin targets for the next clip, wrists, hand shapes">More ▾</button>
+              <div id="poseMorePanel" class="popover pose-more" hidden>
+                <div class="pm-sec"><span class="pm-label">This pose</span><div class="pm-row"><button class="secondary" id="mirrorPose" type="button" title="Mirror the pose left ↔ right (it keeps facing the same way)">Mirror</button><button class="secondary" id="copyPose" type="button" title="Copy this pose, to paste on another frame or clip">Copy</button><span class="trail-anchor">
+              <button class="secondary" id="pasteButton" type="button" title="Paste the copied pose, or one limb of it, onto this frame" disabled>Paste ▾</button>
+              <div id="pastePanel" class="popover" hidden>
+                <button class="secondary" type="button" data-paste="all">The whole pose</button>
+                <button class="secondary" type="button" data-paste="LeftArm">Left arm</button>
+                <button class="secondary" type="button" data-paste="RightArm">Right arm</button>
+                <button class="secondary" type="button" data-paste="LeftLeg">Left leg</button>
+                <button class="secondary" type="button" data-paste="RightLeg">Right leg</button>
+                <button class="secondary" type="button" data-paste="Spine">Back, neck and head</button>
+              </div>
+            </span></div></div>
+                <details class="pm-sec pm-fold"><summary class="pm-label">Other ways to use this pose</summary><span class="pm-how">Your pose change is already in the clip (keyed). These are other ways: new motion through it, or writing it in for good.</span><div class="pm-row"><button class="secondary" id="regenAround" type="button" title="Key does not regenerate anything: it blends your pose in. This instead asks the model for new motion through your pose, over the frames either side (the ± choice). Use it when the blend looks stiff" disabled>Regenerate through it</button><select id="applyFalloff" title="Frames either side that ease into the edit (also the window Regenerate around frees)"><option value="6">±6 frames</option><option value="12" selected>±12 frames</option><option value="24">±24 frames</option><option value="45">±45 frames</option></select></div>
+                <button id="applyEdit" type="button" title="Write this pose straight into the motion (not a key), easing in over the frames set beside Regenerate. Use Key instead to keep it editable on the timeline" disabled>Bake into the clip</button>
+              <button class="secondary" id="holdApply" type="button" title="Keep the moved handles where they are across the range (Range tool, [ ]), solving every frame, and bake it" disabled>Hold over range</button>
+                <button class="secondary" id="holdPin" type="button" title="Pin the moved handles where they are across the range (Range tool) as targets for the next generation" disabled>Pin hold</button>
+                <button class="secondary" id="pinTargets" type="button" title="Pin the moved hands/feet/hips as targets for the next generation">Pin targets</button>
+                <button class="secondary" id="pinEditedPose" type="button" title="Pin the whole edited pose as a full-body keyframe">Pin full pose</button>
+                </details>
+                <details class="pm-sec pm-fold"><summary class="pm-label">Hand shapes, wrists, guards</summary><button class="secondary" id="bakeWrists" type="button" title="Write the cleaned wrists into the clip (undoable)">Bake wrists</button>
+                <button class="secondary" id="fixClipping" type="button" title="On every frame where a hand sinks into the head, move it just outside the skull and bake (undoable)">Fix hand-in-head</button>
+                <span class="hand-track" title="Hand shapes from this frame on, saved on the clip and exported as a per-frame curve">
+            <span class="hint">Hands</span>
+            <select id="handL" class="inline"><option value="auto">L auto</option><option value="relaxed">L relaxed</option><option value="fist">L fist</option><option value="open">L open</option><option value="point">L point</option><option value="flat">L flat</option></select>
+            <select id="handR" class="inline"><option value="auto">R auto</option><option value="relaxed">R relaxed</option><option value="fist">R fist</option><option value="open">R open</option><option value="point">R point</option><option value="flat">R flat</option></select>
+            <button class="secondary" id="handKeySet" type="button" title="Set these shapes from the current frame on">Set here</button>
+            <button class="secondary" id="handKeyClear" type="button" title="Remove the hand key at this frame">Clear</button>
+          </span>
+                <span class="trail-anchor">
+              <button class="secondary" id="rulesButton" type="button" title="What posing keeps you from doing (floor, body, joint limits) and the helpers (suggestions, labels, balance)">Guards ▸</button>
+              <div id="rulesPanel" class="popover" hidden>
+                <label class="check" title="Limbs can’t be posed through the body: a hand or forearm pushed into the chest, head or legs, or a foot through the other leg, slides along it instead. Never makes a pose worse than the clip already was"><input type="checkbox" id="bodySolid" checked> Solid body</label>
+                <label class="check" title="Keep every joint inside what a body can do while you pose: knees and elbows bend only the right way, hips and shoulders point the limb only where people do, spine, neck, wrists and feet within range. Never makes a pose worse than the clip already was"><input type="checkbox" id="jointLimits" checked> Joint limits</label>
+                <label class="check" title="The floor (and box tops) are solid while you pose: a foot or hand pushed down slides along the floor, and with the hips pushed down the legs bend instead of sinking. Never makes a pose worse than the clip already was"><input type="checkbox" id="hardFloor" checked> Hard floor</label>
+                <label class="check" title="Show where the body's weight is (a dot on the floor) and what it stands on (an outline). Green: the pose would hold still; red: it would tip over. For held poses (standing, crouching, leaning); a walk or run tips forward on purpose"><input type="checkbox" id="balanceOn" checked> Balance guide</label>
+                <label class="check" title="While you pose, show the closest real pose from your library as a green ghost you can apply. Untick to turn suggestions off (remembered)"><input type="checkbox" id="suggestOn" checked> Pose suggestions</label>
+                <label class="check" title="Show the names next to the handles on the stage (L)"><input type="checkbox" id="handleLabels" checked> Labels</label>
+                <label class="check" title="Limit each wrist to human range (twist ±80°, bend 70°) and smooth it — shown live on the stage"><input type="checkbox" id="cleanWrists"> Clean wrists</label>
+              </div>
+            </span></details>
+                <button class="secondary" id="resetHandles" type="button">Reset the pose</button>
+              </div>
+            </span>
+            
+            <span class="pb-spacer"></span>
+            
+            <button class="icon pb-fold" id="poseFold" type="button" title="Fewer controls (the mode, Rules and Apply stay)">–</button>
+          </div>
+          <div class="pb-row pb-selected">
+            <span id="moveControls" class="move-controls" hidden><b id="moveName"></b>
+              <button class="secondary" id="pinHandle" type="button" title="Pin this hand or foot where it is (an IK lock for this limb): it stays put in the world while you move or turn anything else. Unpinned limbs ride along with the body (FK)">Pin</button>
+              <span id="rollControls" hidden title="Roll the foot onto its ball (heel up, +) or back onto its heel (toes up, −)"><label class="inline">Roll <input id="footRoll" type="range" min="-40" max="60" step="1" value="0"></label> <span id="footRollValue" class="hint">0°</span></span>
+            </span>
+            <span id="turnControls" class="turn-controls" hidden><b id="turnName"></b> <span id="jointRot" class="joint-rot" hidden title="This joint's angles in degrees. Type a value and press Enter"><label id="jrl0"><span class="jr-lbl">Bend</span> <input id="jrx" type="number" step="5">°</label><label id="jrl1"><span class="jr-lbl">Side</span> <input id="jry" type="number" step="5">°</label><label id="jrl2"><span class="jr-lbl">Twist</span> <input id="jrz" type="number" step="5">°</label></span> <button class="secondary" id="straightenJoint" type="button" title="Set this joint straight: a straight knee or elbow, a flat foot, straight toes or wrist, an upright back and neck">Straighten</button> <button class="secondary" id="resetJoint" type="button" title="Put this joint back the way the clip had it">Reset</button> <button class="secondary" id="poseFineToggle" type="button" aria-expanded="false" title="Axes (Joint / World) and 1° Swing / Tilt / Twist nudge buttons">Fine ▸</button> <button class="secondary" id="jointAnglesToggle" type="button" hidden>Angles°</button> <span id="poseFineRow" class="pose-fine-row" hidden><span class="seg" id="ringAxes" title="Which axes the rings turn about: the joint's own, or the world's"><button class="secondary on" id="ringLocal" type="button" title="Rings follow the joint: red, green and blue turn it about its own axes">Joint axes</button><button class="secondary" id="ringWorld" type="button" title="Rings line up with the stage: turn about up, left-right and front-back">World axes</button></span> <span class="joint-nudge" id="jointNudge" title="Nudge this joint: 1° a click (Shift 5°, Alt ¼°); the arrow keys and Page Up/Down do the same"><span class="jn-group"><span class="jn-name">Swing</span><button class="secondary icon" type="button" data-nudge="left" title="Swing it left (←)">◀</button><button class="secondary icon" type="button" data-nudge="right" title="Swing it right (→)">▶</button></span><span class="jn-group"><span class="jn-name">Tilt</span><button class="secondary icon" type="button" data-nudge="up" title="Tilt it up (↑)">▲</button><button class="secondary icon" type="button" data-nudge="down" title="Tilt it down (↓)">▼</button></span><span class="jn-group"><span class="jn-name">Twist</span><button class="secondary icon" type="button" data-nudge="twistL" title="Twist it (Page Up)">⟲</button><button class="secondary icon" type="button" data-nudge="twistR" title="Twist it the other way (Page Down)">⟳</button></span></span></span></span>
+            <span id="handleFields" class="handle-fields" hidden>
+            <label>x <input id="hx" type="number" step="0.01"></label><label>y <input id="hy" type="number" step="0.01"></label><label>z <input id="hz" type="number" step="0.01"></label>
+            <span id="handleRot" hidden title="Hand or foot angles in degrees"><label>Bend <input id="hrx" type="number" step="5" value="0">°</label><label>Side <input id="hry" type="number" step="5" value="0">°</label><label>Twist <input id="hrz" type="number" step="5" value="0">°</label></span>
+          </span>
+          </div>
+          <div class="pb-row suggest-row" id="suggestRow" hidden><span class="hint" id="suggestHint"></span><button class="secondary" id="applySuggestion" type="button" title="Take the suggested pose (the ghost): your moved handles stay where they are, the rest of the body follows a real pose. Ctrl+Z undoes it" disabled>Apply suggestion</button><button class="secondary" id="nextSuggestion" type="button" title="Show the next-closest pose from another clip" disabled>Next</button></div>
+          
+        </div>
+      </div>
+      <div id="ghostBar" class="stage-ghost" hidden aria-label="Ghost">
+        <span class="sg-dot" aria-hidden="true"></span>
+        <span class="hint" id="ghostHint"></span>
+        <select id="ghostMode" title="How the ghost sits against the clip on the stage"><option value="start">Align starts</option><option value="side">Side by side (1 m)</option><option value="none">As recorded</option></select>
+        <button class="icon" id="clearGhost" type="button" title="Take the ghost off the stage">×</button>
+      </div>
+      <div class="stage-rail" aria-label="Tools">
+        <button class="secondary" id="handles" type="button" title="Drag hands, feet or the hips on the current frame to set targets (H)"><span class="rail-icon">✋</span><span>Handles</span></button>
+        <button class="secondary" id="pathTool" type="button" title="Draw the route on the ground for the next clip (P)"><span class="rail-icon">〰</span><span>Path</span></button>
+        <button class="secondary" id="pointTool" type="button" title="Place a point in space the next clip must touch: a hand or a foot reaches it at a frame, like a doorknob or a switch (O)"><span class="rail-icon">●</span><span>Point</span></button>
+        <button class="secondary" id="addBox" type="button" title="Put a box on the stage in front of the character (a seat, a ledge). The checks treat its top as floor; poses in a sequence can sit or stand on it"><span class="rail-icon">▢</span><span>Box</span></button>
+        <button class="secondary" id="keepTool" type="button" title="Work on a stretch of the clip: set its start and end, then redo it, tween it, mirror it, or keep it for the next clip (K; [ and ] set start and end)"><span class="rail-icon">⟦⟧</span><span>Range</span></button>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="transport-row">
+      <span class="group transport">
+        <button class="secondary step" id="toStart" type="button" title="First frame (Home)">|‹</button>
+        <button class="secondary step" id="stepBack" type="button" title="Previous frame (←, Shift: 10)">‹</button>
+        <button id="play" type="button" title="Play / pause (Space)">Pause</button>
+        <button class="secondary step" id="stepForward" type="button" title="Next frame (→, Shift: 10)">›</button>
+        <button class="secondary step" id="toEnd" type="button" title="Last frame (End)">›|</button>
+        <select id="speed" title="Playback speed"><option value="0.25">¼×</option><option value="0.5">½×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>
+      </span>
+        <span class="frame-readout" title="Current frame of the clip, and the time at 30 frames per second"><span id="frameText" class="readout"></span><span id="timeText" class="readout time"></span></span>
+        <span class="history" aria-label="Undo and redo"><button class="secondary step" id="undoBtn" type="button" disabled>↶</button><button class="secondary step" id="redoBtn" type="button" disabled>↷</button></span>
+        <span class="key-tools" title="Keys: pose with Handles, then Key. Between keys the motion blends from one to the next">
+          <button class="secondary step" id="prevKey" type="button" title="Previous key (,)">◆‹</button>
+          
+          <button class="secondary step" id="nextKey" type="button" title="Next key (.)">›◆</button>
+          <button class="secondary" id="autoKey" type="button" aria-pressed="false" title="Auto key: every change you make with Handles is keyed as you let go (no need to press Key)">Auto key</button>
+          <label class="ease" title="How gradually your keys blend in before the first key and out after the last">Blend in/out <select id="keyBlend"><option value="0">none</option><option value="6">6 frames</option><option value="12" selected>12 frames</option><option value="24">24 frames</option><option value="45">45 frames</option></select></label>
+          <button class="secondary" id="copyLink" type="button" hidden title="Copy a link to this animation at the current frame">Copy link</button>
+        </span>
+        <span class="tr-spacer"></span>
+        <div id="markerBar" class="marker-bar" hidden>
+          <span class="label">Markers</span>
+          <span id="markerChips" class="row-gap wrap"></span>
+          <button class="chip" id="addMarker" type="button" title="Name this frame: hit, plant, release… (M)">+ Marker</button>
+        </div>
+      </div>
+      <div id="takesStrip" class="takes-strip" hidden></div>
+      <div class="timeline">
+        <div id="keepBand" class="keep-band" hidden title="Kept range"></div>
+        <input id="frame" type="range" min="0" value="0" step="1">
+        <div id="markerTrack" class="marker-track" title="Markers: M adds one at the current frame"></div>
+        <div id="trackLabels" class="track-labels"></div>
+        <canvas id="timeline" class="timeline-strip" title="Click or drag to scrub · Shift-drag sets a keep range · double-click a marker or keyframe to jump · wheel steps frames · Ctrl + wheel zooms · double-click the frame numbers to fit"></canvas>
+      </div>
+      <span class="camera hint">Stage: drag to rotate · wheel to zoom · Shift/right-drag to pan · double-click to reset</span>
+    </div>
+  </section>
+
+  <!-- Right dock: library -->
+  <div class="resizer" id="resizeRight" data-for="right" title="Drag to resize"></div>
+  <aside class="dock" id="dockRight" data-dock="right">
+    <header class="dock-head">
+      <button class="icon" id="collapseRight" title="Collapse panel">›</button>
+      <nav class="tabs" data-dock="right">
+        <button type="button" data-tab="library" class="on">Library</button>
+        <button type="button" data-tab="actors">Actors</button>
+        <button type="button" data-tab="character" hidden title="The body on the stage: Understudy's doll or your own character">Body</button>
+        <button type="button" data-tab="reference" title="Reference image or video">Refs</button>
+      </nav>
+      <button class="icon" id="about" title="About Understudy">?</button>
+    </header>
+    <div class="dock-body">
+      <section class="page" data-page="library">
+      <div class="toolbar">
+        <div class="project-row">
+          <select id="projectSelect" title="Project"></select>
+          <button class="icon" id="newProject" title="New project">+</button>
+          <button class="icon" id="projectMenu" title="Rename or remove this project">⋯</button>
+        </div>
+        <div class="folders" id="folders" hidden></div>
+        <input id="search" type="search" placeholder="Search clips…" autocomplete="off">
+        <div class="chips">
+          <label class="select-all" title="Select or unselect every clip shown (Ctrl+A · Esc clears)"><input type="checkbox" id="selectAll"> All</label>
+          <button class="chip" id="chipFavorites" type="button" title="Only favourites (★ on a clip)">★ Favorites</button>
+          <button class="chip" id="chipArchived" type="button" title="Archived clips (kept, out of the way)">Archived</button>
+          <button class="chip" id="chipTrash" type="button" title="Deleted clips wait here, restorable, until the Trash is emptied">Trash</button>
+          <button class="chip danger" id="emptyTrash" type="button" hidden>Empty Trash</button>
+          <button class="chip" id="chipBoard" type="button" title="Coverage board: which animations this project still needs">Board</button>
+          <span class="hint" id="libraryCount"></span>
+        </div>
+      </div>
+      <div id="board" class="board" hidden>
+        <div class="row-between"><span class="hint">Needed animations (tags)</span><button class="chip" id="editSlots" type="button">Edit list…</button></div>
+        <div id="slots" class="slots"></div>
+      </div>
+      <div id="bulk" class="bulk" hidden>
+        <span id="bulkCount"></span>
+        <button class="chip" id="bulkArchive" type="button">Archive</button>
+        <button class="chip" id="bulkRestore" type="button">Restore</button>
+        <button class="chip" id="bulkMove" type="button">Move…</button>
+        <button class="chip" id="bulkStar" type="button">★</button>
+        <button class="chip" id="bulkTag" type="button">Tag…</button>
+        <button class="chip danger" id="bulkDelete" type="button" title="To the Trash; restorable">Delete</button>
+        <button class="chip" id="bulkTrashRestore" type="button" hidden>Restore</button>
+        <button class="chip danger" id="bulkDeleteForever" type="button" hidden>Delete forever</button>
+        <button class="chip" id="bulkClear" type="button">Clear</button>
+      </div>
+      <div id="items" class="gallery readout">Loading…</div>
+      </section>
+
+      <section class="page" data-page="actors" hidden>
+      <section class="card" id="actorsCard">
+        <h2>Actors</h2>
+        <p class="hint" id="actorsHint"></p>
+        <div id="actorList" class="actor-list"></div>
+        <div class="row-gap wrap"><button class="chip" id="addActor" type="button">+ Actor</button><button class="chip" id="actorUseStage" type="button" title="Give the selected actor the clip on the stage">Use clip on stage</button><button class="chip" id="actorContact" type="button" title="Pin a hand or foot of the actor on the stage to another actor's joint at this frame">Contact…</button><button class="chip" id="sceneExport" type="button" title="Download the scene: actors, clips, placements and offsets as JSON">Scene JSON</button><button class="chip" id="sceneUnreal" type="button" title="Send every actor's clip to Unreal, one job after another">Send scene to Unreal</button></div>
+      </section>
+      </section>
+
+      <section class="page" data-page="character" hidden data-removed="only Understudy's own body is used">
+      <section class="card" id="characterCard">
+        <h2>Character</h2>
+        <p class="hint"><b>Body</b> on the stage shows Understudy's own doll. Pick a GLB here to play clips on your character instead (UE5 Manny-style, Mixamo, Rigify or VRM bone names). The Unreal retarget is still the one that ships.</p>
+        <input type="file" id="characterFile" accept=".glb,.gltf,model/gltf-binary">
+        <div id="characterBar" class="row-gap wrap" hidden>
+          <span class="hint" id="characterHint"></span>
+          <label class="check"><input type="checkbox" id="characterFit" checked> Fit to clip height</label>
+          <label class="check"><input type="checkbox" id="characterSkeleton"> Skeleton over it</label>
+          <button class="chip" id="clearCharacter" type="button">Clear</button>
+        </div>
+      </section>
+      </section>
+
+      <section class="page" data-page="reference" hidden>
+      <section class="card reference" id="referenceCard">
+        <h2>Reference</h2>
+        <p class="hint">An image or a video beside the stage; a video can follow the clip's frame.</p>
+        <div class="file-pick">
+          <button type="button" class="secondary" id="referencePick">Choose file…</button>
+          <span class="hint file-name" id="referenceFileName">No file chosen</span>
+          <input type="file" id="referenceFile" class="sr-only" accept="image/*,video/*">
+        </div>
+        <div id="referenceView"></div>
+        <label class="check"><input type="checkbox" id="referenceSync" checked> Video follows the clip's frame</label>
+        <div id="mocapBar" class="mocap-bar" hidden>
+          <h3>Pose from the reference <span class="hint">prototype · MediaPipe</span></h3>
+          <div class="row-gap wrap">
+            <button type="button" id="mocapPoseGemx" hidden title="NVIDIA GEM-X on the server (GPU): a true 3D pose of the person in the image or the video's current frame, on Kimodo's own skeleton — works on many anime and illustrated figures too. 20–40 s">Pose with GEM-X</button>
+            <button type="button" id="mocapPose" title="Quick in-page pose with MediaPipe (depth is a guess): find the body (and hands) in the image, or in the video's current frame, and put that pose on the skeleton at the stage's current frame as a handle edit">Pose from this frame</button>
+            <button type="button" id="mocapGemx" hidden title="NVIDIA GEM-X on the server (GPU): tracks the whole video into SOMA motion — Kimodo's own skeleton, true 3D depth — then pins keys from it. About a minute and a half for a 6 s clip">Track with GEM-X</button>
+            <button type="button" id="mocapUseTrack" hidden title="Make a clip from the tracked motion as it is (no generation): its timing and speed are the video's. Clean up then fixes the floor, shake and clipping. The keys route below regenerates the motion with Kimodo instead, which smooths fast strikes">Use the tracked motion as a clip</button>
+            <button type="button" id="mocapTrack" title="Quick in-page tracking with MediaPipe (depth is a guess): tracks the whole video (up to 12 s) and pins keys every few frames; Kimodo fills the motion between them">Track video → keyframes</button>
+          </div>
+          <div class="row-gap wrap">
+            <label title="Which way the pose faces on the stage">Facing <select id="mocapFacing" class="inline"><option value="clip">like the clip at this frame</option><option value="camera">as in the image (toward the camera)</option></select></label>
+            <label id="mocapStepLabel" title="One key per this many clip frames on average (30 per second). Fewer keys leave Kimodo more freedom">Key every <input id="mocapStep" type="number" min="2" max="30" step="1" value="10"> frames</label>
+            <label id="mocapKeyModeLabel" title="Where the keys go: on the frames where the motion turns (a strike's peak, a landing), or evenly spaced">Keys <select id="mocapKeyMode" class="inline"><option value="extremes">where the motion turns</option><option value="even">evenly spaced</option></select></label>
+            <label id="mocapPinLabel" title="Whole body pins every joint at each key; hands, feet and hips leave the spine, head and arms' bend to Kimodo">Pin <select id="mocapPin" class="inline"><option value="body">whole body</option><option value="ends">hands, feet and hips</option></select></label>
+            <label class="check"><input type="checkbox" id="mocapOverlay" checked> Show tracking</label>
+            <label class="check" id="mocapPreviewLabel" title="Play the tracked poses on the stage instead of the clip, to compare raw tracking with what Kimodo generated from it"><input type="checkbox" id="mocapPreview"> Raw tracking on the stage</label>
+          </div>
+          <p class="hint" id="mocapHint" hidden></p>
+        </div>
+      </section>
+      </section>
+    </div>
+    <div class="dock-scroll-cue" aria-hidden="true"></div>
+  </aside>
+  <div id="itemMenu" class="menu" hidden></div>
+  <dialog id="contactDialog" class="dialog">
+    <form method="dialog">
+      <h2>Contact</h2>
+      <p class="text hint">Pin one of this actor's hands or feet to a joint of another actor at the current frame — a grab, a block, a throw. The pin becomes a target for the next generation (or Apply it in the Handles bar).</p>
+      <div class="react-grid">
+        <label>My <select id="contactMine"><option value="Left hand">left hand</option><option value="Right hand">right hand</option><option value="Left foot">left foot</option><option value="Right foot">right foot</option></select></label>
+        <label>To <select id="contactOther"></select></label>
+        <label>Their <select id="contactJoint"><option value="LeftHand">left hand</option><option value="RightHand">right hand</option><option value="LeftForeArm">left forearm</option><option value="RightForeArm">right forearm</option><option value="Head">head</option><option value="Chest">chest</option><option value="Hips">hips</option><option value="LeftFoot">left foot</option><option value="RightFoot">right foot</option></select></label>
+        <label>Offset <input id="contactOffset" type="number" step="0.01" value="0.05"> m toward me</label>
+      </div>
+      <div class="row-between"><span class="hint" id="contactHint"></span><span class="row-gap"><button class="secondary cancel" type="button">Cancel</button><button class="ok" type="button">Pin contact</button></span></div>
+    </form>
+  </dialog>
+  <dialog id="reactDialog" class="dialog wide">
+    <form method="dialog">
+      <h2>React</h2>
+      <p class="text hint">Place this actor against another actor at one of its markers, pin the pose it should be in at that moment, and write what it does. Generate makes the clip and it takes this actor's slot.</p>
+      <div class="react-grid">
+        <label>To <select id="reactTo"></select></label>
+        <label>At marker <select id="reactMarker"></select></label>
+        <label>Pose then <select id="reactPose"><option value="">— none —</option><option value="__screen">pose on screen</option></select></label>
+        <label>Distance <input id="reactDistance" type="number" step="0.1" min="0.3" max="5" value="1.2"> m</label>
+        <label class="check"><input type="checkbox" id="reactFace" checked> Face the other actor</label>
+        <label class="check"><input type="checkbox" id="reactLead" checked> Reaction starts 5 frames early</label>
+      </div>
+      <label class="react-prompt">What this actor does <textarea id="reactPrompt" rows="2"></textarea></label>
+      <div class="row-between"><span class="hint" id="reactHint"></span><span class="row-gap"><button class="secondary cancel" type="button">Cancel</button><button class="ok" type="button">Set up the reaction</button></span></div>
+    </form>
+  </dialog>
+  <dialog id="frankenDialog" class="dialog wide">
+    <form method="dialog">
+      <h2>Mix takes</h2>
+      <p class="text hint">Tick a range from each take; the ranges stack as keeps for the next generation (full body, one key every 6 frames). The clip on the stage supplies the prompt and settings.</p>
+      <div id="frankenRows" class="franken-rows"></div>
+      <div class="row-between"><span class="hint" id="frankenHint"></span><span class="row-gap"><button class="secondary cancel" type="button">Cancel</button><button class="ok" type="button">Add keeps</button></span></div>
+    </form>
+  </dialog>
+</main>
+
+<dialog id="aboutDialog">
+  <h2>Understudy</h2>
+  <p>Understudy is an animation tool. Describe a motion, keep the take you like, send it to the game.</p>
+  <p class="hint">Built on <a href="https://github.com/nv-tlabs/kimodo" target="_blank" rel="noreferrer">NVIDIA Kimodo</a> (motion models under the NVIDIA Open Model License) and the <a href="https://github.com/localai-org/kimodo.cpp" target="_blank" rel="noreferrer">kimodo.cpp</a> port by LocalAI with constraints by Digital Contraption Labs (Apache-2.0). Text encoder: Meta Llama 3 (Community License). Pose from the reference: <a href="https://github.com/google-ai-edge/mediapipe" target="_blank" rel="noreferrer">Google MediaPipe</a> (Apache-2.0), run in the page.</p>
+  <h3>The 60-second path</h3>
+  <ol class="hint">
+    <li><b>Generate</b>: describe the motion ("A person …"), set Takes, press Generate. The cleanest take is selected.</li>
+    <li><b>Judge</b>: the badges on the clip say foot slide, floor, jitter, hand in face, floaty jump — or clean.</li>
+    <li><b>Fix</b>: Handles (H) to move a hand, foot, hip, elbow or the look; Apply to clip, or Regenerate around it. Keep (K) to keep a range and regenerate the rest.</li>
+    <li><b>Hands</b>: set hand shapes from the Handles bar; they go to Unreal as curves.</li>
+    <li><b>Scene</b>: Actors tab → add actors, React…, "Actor 2 dodges Actor 1".</li>
+    <li><b>Ship</b>: Export → Send to Unreal (or GLB / BVH / video).</li>
+  </ol>
+  <p class="hint">Shortcuts: Space play/pause · ← → step (Shift: 10) · Home/End first/last frame · T trails · H handles · M marker · 1/3/7/5 views · P path · B body cycle · K keep · [ ] keep range · X skeleton through body · G generate · Ctrl+Z / Ctrl+Y undo / redo edits · Ctrl+A select all · Esc clear</p>
+  <form method="dialog"><button type="submit">Close</button></form>
+</dialog>
+
+<dialog id="sheetDialog">
+  <h2>Prompt sheet</h2>
+  <p class="text">One prompt per line. Add <code>| 120</code> after a prompt for a frame count (default 150). Each line uses the current model, steps and Takes.</p>
+  <textarea id="sheetText" rows="10" placeholder="A person walks forward at an easy pace. | 120&#10;A person jogs forward. | 90&#10;A person stands and looks around nervously."></textarea>
+  <p class="hint" id="sheetHint"></p>
+  <form method="dialog"><button type="button" class="secondary cancel">Cancel</button> <button type="submit" class="ok">Generate all</button></form>
+</dialog>
+<dialog id="styleDialog">
+  <h2>Style set</h2>
+  <p class="text">One action, generated for each gender × archetype. Prompts read “An elderly woman walks forward at an easy pace.”</p>
+  <label>Action (as a verb phrase)</label><input id="styleAction" type="text" placeholder="walks forward at an easy pace">
+  <div class="popover-grid" style="padding-top:8px">
+    <div><label>Genders</label><label class="check"><input type="checkbox" data-gender="man" checked> man</label><label class="check"><input type="checkbox" data-gender="woman" checked> woman</label></div>
+    <div><label>Archetypes</label><label class="check"><input type="checkbox" data-arch="athletic" checked> athletic</label><label class="check"><input type="checkbox" data-arch="average" checked> average</label><label class="check"><input type="checkbox" data-arch="elderly" checked> elderly</label><label class="check"><input type="checkbox" data-arch="young" checked> young</label></div>
+  </div>
+  <div class="field-row two" style="margin-top:8px"><label for="styleFrames">Frames</label><input id="styleFrames" type="number" min="60" max="360" value="120"></div>
+  <p class="hint" id="styleHint"></p>
+  <form method="dialog"><button type="button" class="secondary cancel">Cancel</button> <button type="submit" class="ok">Generate set</button></form>
+</dialog>
+<dialog id="locoDialog">
+  <h2>Locomotion set</h2>
+  <p class="text">Each gait in each direction, with a root path so the motion really goes that way. Tagged for the coverage board (e.g. <code>run_left</code>).</p>
+  <div class="popover-grid" style="padding-top:8px">
+    <div><label>Gaits</label><label class="check"><input type="checkbox" data-gait="walk" data-speed="1.3" checked> walk (1.3 m/s)</label><label class="check"><input type="checkbox" data-gait="jog" data-speed="2.8" checked> jog (2.8 m/s)</label><label class="check"><input type="checkbox" data-gait="run" data-speed="4.5"> run (4.5 m/s)</label></div>
+    <div><label>Directions</label><label class="check"><input type="checkbox" data-dir="forward" checked> forward</label><label class="check"><input type="checkbox" data-dir="backward" checked> backward</label><label class="check"><input type="checkbox" data-dir="left" checked> left (strafe)</label><label class="check"><input type="checkbox" data-dir="right" checked> right (strafe)</label><label class="check"><input type="checkbox" data-dir="turn_left"> turn 90° left</label><label class="check"><input type="checkbox" data-dir="turn_right"> turn 90° right</label></div>
+  </div>
+  <label>Subject (prefix)</label><input id="locoSubject" type="text" value="A person">
+  <div class="field-row two" style="margin-top:8px"><label for="locoFrames">Frames</label><input id="locoFrames" type="number" min="60" max="360" value="90"></div>
+  <p class="hint" id="locoHint"></p>
+  <form method="dialog"><button type="button" class="secondary cancel">Cancel</button> <button type="submit" class="ok">Generate set</button></form>
+</dialog>
+<dialog id="slotsDialog">
+  <h2>Needed animations</h2>
+  <p class="text">One per line. A clip counts for a slot when it carries that tag; a favourite counts as approved.</p>
+  <textarea id="slotsText" rows="10" placeholder="idle&#10;walk_forward&#10;run_forward&#10;jab&#10;block&#10;stagger"></textarea>
+  <form method="dialog"><button type="button" class="secondary cancel">Cancel</button> <button type="submit" class="ok">Save</button></form>
+</dialog>
+<dialog id="pipelineDialog">
+  <h2>Pipeline settings</h2>
+  <p class="text">Where <b>Send to Unreal</b> puts this project's clips. The editor must be closed while a job runs.</p>
+  <label>Unreal project (.uproject)</label><input id="plUproject" type="text" placeholder="C:\Projects\MyGame\MyGame.uproject">
+  <label>Target preset</label>
+  <select id="plPreset">
+    <option value="">— pick to fill the target —</option>
+    <option value="/Game/Characters/Mannequins/Meshes/SKM_Manny">UE5 Manny (Third Person / GASP)</option>
+    <option value="/Game/Characters/Mannequins/Meshes/SKM_Quinn">UE5 Quinn</option>
+    <option value="/Game/Characters/UEFN_Mannequin/Meshes/SKM_UEFN_Mannequin">UEFN Mannequin</option>
+    <option value="none">None (keep the Kimodo skeleton)</option>
+  </select>
+  <label>Target skeletal mesh (empty = keep the Kimodo skeleton)</label><input id="plTarget" type="text" placeholder="/Game/Characters/Mannequins/Meshes/SKM_Manny">
+  <label>Content folder</label><input id="plContent" type="text" placeholder="/Game/Understudy">
+  <label>FBX export folder (empty = <project>\Understudy)</label><input id="plExport" type="text">
+  <label>Extra editor arguments</label><input id="plArgs" type="text" placeholder="-DisablePlugins=Aura">
+  <form method="dialog"><button type="button" class="secondary cancel">Cancel</button> <button type="submit" class="ok">Save</button></form>
+</dialog>
+<dialog id="promptDialog">
+  <h2></h2>
+  <p class="text"></p>
+  <input type="text" maxlength="120" hidden>
+  <select hidden></select>
+  <form method="dialog"><button type="button" class="secondary cancel">Cancel</button> <button type="submit" class="ok">OK</button></form>
+</dialog>
+
+<script type="module" src="/static/js/app.js"></script>
+</body>
+</html>

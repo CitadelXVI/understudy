@@ -1,0 +1,30 @@
+Understudy
+Copyright 2026 CitadelXVI
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This project builds on and includes the work of others:
+
+kimodo.cpp (git submodule kimodo.cpp/), the GGML/C++ port of NVIDIA Kimodo,
+Apache-2.0: https://github.com/Digital-Contraption-Labs/kimodo.cpp
+  It in turn uses ggml (MIT), Eigen (MPL-2.0), JSON for Modern C++ (MIT) and
+  NVIDIA Kimodo's MotionCorrection library (Apache-2.0); see kimodo.cpp/NOTICE.
+
+three.js r160 and its GLTFLoader / BufferGeometryUtils (static/vendor/), MIT,
+Copyright 2010-2023 Three.js Authors: https://threejs.org
+
+MediaPipe Tasks Vision 1.1.1 with the pose and hand landmarker models
+(static/vendor/mediapipe/), Apache-2.0, Copyright Google LLC; see
+static/vendor/mediapipe/LICENSE and README.md (one local change: usage
+logging disabled).
+
+tools/motionbricks ports NVIDIA MotionBricks' SOMA in-betweening kernels to
+numpy; MotionBricks itself and its ONNX model are downloaded separately.
+
+Model weights are NOT part of this repository and are not covered by its
+license. They are downloaded by the user and come under their own terms:
+  - NVIDIA Kimodo SOMA / G1 models: NVIDIA Open Model License
+  - NVIDIA Kimodo SMPL-X model: NVIDIA research-only license (no production
+    use; Understudy refuses to share clips made with it)
+  - Llama-3 text encoder: Meta Llama 3 Community License
+  - NVIDIA MotionBricks and GEM-X: see their own repositories

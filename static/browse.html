@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Understudy · Shared animations</title>
+<style>
+  :root { --bg: #0b0b0c; --panel: #151517; --line: rgba(255,255,255,.12); --text: #f2f2f2; --muted: #9a9aa0; --left: #7fb8ff; --right: #ffb27f; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 18px; background: rgba(11,11,12,.92); border-bottom: 1px solid var(--line); backdrop-filter: blur(6px); }
+  h1 { margin: 0 12px 0 0; font-size: 1.05rem; font-weight: 650; letter-spacing: .01em; }
+  button, .file { appearance: none; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 7px 12px; border-radius: 10px; font: inherit; cursor: pointer; }
+  button:hover, .file:hover { border-color: rgba(255,255,255,.35); }
+  button.primary { background: #f2f2f2; color: #0b0b0c; border-color: #f2f2f2; }
+  button:disabled { opacity: .45; cursor: default; }
+  input[type=text], input[type=url] { border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 7px 10px; border-radius: 10px; font: inherit; min-width: 0; }
+  #search { flex: 1 1 180px; max-width: 320px; }
+  #folder { flex: 1 1 260px; max-width: 420px; }
+  .file input { display: none; }
+  #status { width: 100%; color: var(--muted); font-size: .85rem; }
+  main { padding: 18px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+  .card { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+  .card canvas { width: 100%; aspect-ratio: 4 / 5; background: #0f0f11; border-radius: 10px; }
+  .card h2 { margin: 2px 0 0; font-size: .95rem; font-weight: 600; line-height: 1.25; }
+  .meta { color: var(--muted); font-size: .78rem; }
+  .tags { display: flex; flex-wrap: wrap; gap: 4px; }
+  .tags span { font-size: .7rem; padding: 1px 7px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
+  .lic { color: var(--muted); font-size: .68rem; }
+  .card .row { display: flex; gap: 6px; margin-top: auto; }
+  .card .row button { flex: 1; }
+  .empty { color: var(--muted); max-width: 640px; }
+  .empty code { color: var(--text); }
+  @media (max-width: 520px) { header { padding: 12px 16px; } main { padding: 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Understudy · Shared animations</h1>
+  <label class="file" title="Open .understudy files someone shared with you">Open files…<input id="files" type="file" accept=".understudy,application/json" multiple></label>
+  <input id="folder" type="url" placeholder="Shared folder address (where its index.json lives)">
+  <button id="loadFolder" type="button">Open folder</button>
+  <input id="search" type="text" placeholder="Search names, tags, authors">
+  <button id="makeIndex" type="button" title="Write the index.json for a folder of .understudy files, so others can open the folder by its address" disabled>Make index.json</button>
+  <div id="status"></div>
+</header>
+<main>
+  <div class="grid" id="grid"></div>
+  <p class="empty" id="empty">Open <code>.understudy</code> files (from <b>Share</b> on any clip in Understudy), or the address of a shared folder that holds them with an <code>index.json</code> — a Discord or Drive link, a GitHub folder, any web folder. Each card plays its clip; <b>Add to my library</b> copies it into your Understudy, in the project “Shared”.</p>
+</main>
+<script type="module">
+const $ = s => document.querySelector(s);
+const packs = [];          // {pack, file, source}
+const setStatus = (t, err) => { $('#status').textContent = t; $('#status').style.color = err ? '#ff8a80' : ''; };
+const shareable = m => /^(soma|g1)/i.test(m || '');
+
+// quaternion helpers (xyzw)
+const mul = (a, b) => [a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1], a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0], a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3], a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]];
+const rot = (q, v) => { const [x, y, z, w] = q, ix = w * v[0] + y * v[2] - z * v[1], iy = w * v[1] + z * v[0] - x * v[2], iz = w * v[2] + x * v[1] - y * v[0], iw = -x * v[0] - y * v[1] - z * v[2]; return [ix * w + iw * -x + iy * -z - iz * -y, iy * w + iw * -y + iz * -x - ix * -z, iz * w + iw * -z + ix * -y - iy * -x]; };
+function fk(pack, f) {
+  const { parents, offsets } = pack.skeleton, P = [], G = [];
+  for (let j = 0; j < parents.length; j++) { const q = pack.rotations[f][j], p = parents[j]; if (p < 0) { G[j] = q; P[j] = pack.root[f]; } else { G[j] = mul(G[p], q); const o = rot(G[p], offsets[j]); P[j] = [P[p][0] + o[0], P[p][1] + o[1], P[p][2] + o[2]]; } }
+  return { P, G };
+}
+// a looping stick figure: three-quarter view from the first frame's heading, framed on the whole clip
+function player(canvas, pack) {
+  const ctx = canvas.getContext('2d'), names = pack.skeleton.joint_names || [], parents = pack.skeleton.parents;
+  const { G } = fk(pack, 0), f0 = rot(G[0], [0, 0, 1]), yaw = Math.atan2(f0[0], f0[2]) - Math.PI / 6, c = Math.cos(-yaw), s = Math.sin(-yaw);
+  const frames = pack.root.length, step = Math.max(1, Math.floor(frames / 60)), proj = [];
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (let f = 0; f < frames; f++) { const { P } = fk(pack, f); const pts = P.map(p => [p[0] * c + p[2] * s, p[1]]); proj.push(pts); for (const [x, y] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); } }
+  for (const b of pack.props || []) { for (const [lx, lz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { const x = b.pos[0] + lx * b.size[0] / 2 * Math.cos(b.yaw || 0) - lz * b.size[2] / 2 * Math.sin(b.yaw || 0), z = b.pos[2] + lx * b.size[0] / 2 * Math.sin(b.yaw || 0) + lz * b.size[2] / 2 * Math.cos(b.yaw || 0), px = x * c + z * s; x0 = Math.min(x0, px); x1 = Math.max(x1, px); } y1 = Math.max(y1, b.pos[1] + b.size[1]); }
+  y0 = Math.min(y0, 0);
+  const dpr = window.devicePixelRatio || 1;
+  const draw = f => {
+    const w = canvas.clientWidth * dpr, h = canvas.clientHeight * dpr; if (canvas.width !== w) { canvas.width = w; canvas.height = h; }
+    const span = Math.max(x1 - x0, y1 - y0, 1), k = (Math.min(w, h * 0.8) - 24 * dpr) / span, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const sx = x => w / 2 - (x - cx) * k, sy = y => h / 2 - (y - cy) * k;
+    ctx.clearRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = dpr; ctx.beginPath(); ctx.moveTo(8 * dpr, sy(0.02)); ctx.lineTo(w - 8 * dpr, sy(0.02)); ctx.stroke();
+    // the clip's boxes (a seat, a table, a wall), as wire boxes in the same view
+    ctx.strokeStyle = 'rgba(255,210,127,.75)'; ctx.lineWidth = 1.5 * dpr;
+    for (const b of pack.props || []) {
+      if (b.kind && b.kind !== 'box') continue;
+      const cy2 = Math.cos(b.yaw || 0), sy2 = Math.sin(b.yaw || 0), cs = [];
+      for (const [lx, lz] of [[-b.size[0] / 2, -b.size[2] / 2], [b.size[0] / 2, -b.size[2] / 2], [b.size[0] / 2, b.size[2] / 2], [-b.size[0] / 2, b.size[2] / 2]]) {
+        const x = b.pos[0] + lx * cy2 - lz * sy2, z = b.pos[2] + lx * sy2 + lz * cy2, px = x * c + z * s;
+        cs.push([px, b.pos[1]], [px, b.pos[1] + b.size[1]]);
+      }
+      for (let i = 0; i < 4; i++) { const j = (i + 1) % 4; for (const [a2, b2] of [[cs[i * 2], cs[j * 2]], [cs[i * 2 + 1], cs[j * 2 + 1]], [cs[i * 2], cs[i * 2 + 1]]]) { ctx.beginPath(); ctx.moveTo(sx(a2[0]), sy(a2[1])); ctx.lineTo(sx(b2[0]), sy(b2[1])); ctx.stroke(); } }
+    }
+    const pts = proj[f]; ctx.lineCap = 'round'; ctx.lineWidth = 2.5 * dpr;
+    for (let j = 1; j < parents.length; j++) { const n = names[j] || ''; ctx.strokeStyle = n.startsWith('Left') ? '#7fb8ff' : n.startsWith('Right') ? '#ffb27f' : '#f2f2f2'; ctx.beginPath(); ctx.moveTo(sx(pts[j][0]), sy(pts[j][1])); ctx.lineTo(sx(pts[parents[j]][0]), sy(pts[parents[j]][1])); ctx.stroke(); }
+    const hd = names.indexOf('Head'); if (hd >= 0) { ctx.fillStyle = '#f2f2f2'; ctx.beginPath(); ctx.arc(sx(pts[hd][0]), sy(pts[hd][1]), Math.max(3 * dpr, 0.08 * k), 0, Math.PI * 2); ctx.fill(); }
+  };
+  let f = 0, last = 0;
+  const loop = t => { if (!canvas.isConnected) return; if (t - last > 1000 / 30) { last = t; draw(f); f = (f + 1) % frames; } requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+}
+function card(entry) {
+  const p = entry.pack, el = document.createElement('div'); el.className = 'card'; el.dataset.search = [p.name, p.author, p.prompt, ...(p.tags || [])].join(' ').toLowerCase();
+  const cv = document.createElement('canvas');
+  const h2 = document.createElement('h2'); h2.textContent = p.name || 'Untitled';
+  const meta = document.createElement('div'); meta.className = 'meta'; meta.textContent = `${(p.frames / (p.fps || 30)).toFixed(1)} s${p.author ? ' · by ' + p.author : ''}${p.props?.length ? ` · ${p.props.length} box${p.props.length > 1 ? 'es' : ''}` : ''}`;
+  const tags = document.createElement('div'); tags.className = 'tags'; for (const t of p.tags || []) { const s = document.createElement('span'); s.textContent = t; tags.append(s); }
+  const lic = document.createElement('div'); lic.className = 'lic'; lic.textContent = p.license || '';
+  const row = document.createElement('div'); row.className = 'row';
+  const add = document.createElement('button'); add.className = 'primary'; add.type = 'button'; add.textContent = 'Add to my library';
+  add.onclick = async () => {
+    add.disabled = true; add.textContent = 'Adding…';
+    try {
+      const r = await fetch('/api/animations/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: p.name, project: 'Shared', model: p.model, prompt: p.prompt || p.name, tags: [...(p.tags || []), 'shared', ...(p.author ? ['by ' + p.author] : [])], root: p.root, rotations: p.rotations }) });
+      if (!r.ok) throw new Error(await r.text());
+      const a = await r.json();
+      if (p.props?.length) await fetch(`/api/animations/${a.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ props: p.props }) });
+      add.textContent = 'Added ✓'; setStatus(`“${p.name}” is in your library (project “Shared”).`);
+    } catch (e) { add.disabled = false; add.textContent = 'Add to my library'; setStatus(e.message, true); }
+  };
+  row.append(add); el.append(cv, h2, meta, tags, lic, row);
+  requestAnimationFrame(() => player(cv, p));
+  return el;
+}
+function addPack(pack, file, source) {
+  if (!pack || pack.understudy_pack == null || !Array.isArray(pack.root) || !pack.skeleton) throw new Error(`${file}: not an Understudy share pack`);
+  if (!shareable(pack.model)) throw new Error(`${file}: made with ${pack.model}, whose licence is research-only — not added`);
+  if (packs.some(e => e.file === file && e.source === source)) return;
+  const entry = { pack, file, source }; packs.push(entry); $('#grid').append(card(entry)); $('#empty').hidden = true; $('#makeIndex').disabled = false; filter();
+}
+$('#files').addEventListener('change', async e => {
+  const errs = [];
+  for (const f of e.target.files) { try { addPack(JSON.parse(await f.text()), f.name, 'local'); } catch (x) { errs.push(x.message); } }
+  setStatus(errs.length ? errs.join(' · ') : `${packs.length} animation${packs.length === 1 ? '' : 's'} open.`, errs.length > 0);
+  e.target.value = '';
+});
+$('#loadFolder').addEventListener('click', async () => {
+  let base = $('#folder').value.trim(); if (!base) return;
+  if (!/index\.json$/i.test(base)) base = base.replace(/\/?$/, '/') + 'index.json';
+  setStatus('Opening the folder…');
+  try {
+    const idx = await (await fetch(base)).json(), root = base.replace(/index\.json$/i, ''), errs = [];
+    for (const it of idx.packs || []) { try { const pk = await (await fetch(new URL(it.file, root))).json(); addPack(pk, it.file, root); } catch (x) { errs.push(x.message); } }
+    setStatus(errs.length ? errs.join(' · ') : `${(idx.packs || []).length} animations from ${idx.title || 'the folder'}.`, errs.length > 0);
+  } catch (e) { setStatus(`Couldn't open that folder: ${e.message}`, true); }
+});
+$('#makeIndex').addEventListener('click', () => {
+  const idx = { understudy_index: 1, title: 'Shared Understudy animations', packs: packs.map(({ pack: p, file }) => ({ file, name: p.name, author: p.author || '', tags: p.tags || [], seconds: +(p.frames / (p.fps || 30)).toFixed(2), model: p.model })) };
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(idx, null, 1)], { type: 'application/json' })); a.download = 'index.json'; a.click();
+  setStatus('index.json saved: put it in the folder next to the .understudy files, then share the folder’s address.');
+});
+const filter = () => { const q = $('#search').value.trim().toLowerCase(); for (const c of $('#grid').children) c.hidden = q && !c.dataset.search.includes(q); };
+$('#search').addEventListener('input', filter);
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="16" fill="#fff"/>
+  <!-- spotlight cone -->
+  <path d="M32 9 L55 53 H9 Z" fill="#000"/>
+  <!-- performer in the light -->
+  <circle cx="32" cy="33" r="4" fill="#fff"/>
+  <path d="M32 37.5 V47 M27 41 L32 38.5 L37 41 M32 47 L28.5 53 M32 47 L35.5 53" stroke="#fff" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+</svg>
